@@ -1,96 +1,92 @@
-﻿
-#include <../QJEventCenter.h>
+
+#include "../QJEvent.h"
 #include <iostream>
 #include <thread>
-#include <memory>
+
+
 using namespace std;
-using namespace qijia;
-class Sprite : public std::enable_shared_from_this<Sprite>
+
+class ThreadTestBase{};
+class TestBase{};
+
+enum State
+{
+    State_Normal = 1,
+    State_Press,
+    State_Focus,
+    State_Disable,
+    State_Select,
+};
+
+class ThreadTest : public ThreadTestBase
 {
 public:
-    void test(string _ref)
+    //QJSIGNAL(int,int) m_addSignal;
+    Event_Def(m_addSignal,int,int);
+    Event_Def(KClickEvent, State);
+    void run()
     {
-        cout << std::this_thread::get_id ()<<" "<<this<<"I am here :"<<_ref<<endl;
-        return;
-    }
-    void dosomthing(string _ref)
-    {
-        cout << std::this_thread::get_id ()<<"  "<<this<< "I am here do sth:"<<_ref<<endl;
-        return;
-    }
-    void send(string i)
-    {
-        cout << "send !!!"<<i<<endl;
-    }
-    void signal(string str)
-    {
-        QJemit(Sprite::send,str );
+        while(1)
+        {
+            //QJEMITSYNC(m_addSignal, rand() % 100, rand() % 100);
+            ESendEvent_Asyn(this,m_addSignal,rand() % 100, rand() % 100);
+            ESendEvent(this,KClickEvent,State_Select);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
     }
 };
 
-class Test : public std::enable_shared_from_this<Test>
+class Test : public TestBase
 {
 public:
-    Test(shared_ptr<Sprite> s)
-        :sp(s)
-    {}
-    void dosomthing(string _ref)
+    Test(){}
+    void add(int a, int b)
     {
-        cout << std::this_thread::get_id ()<<"  "<<this<< "Test:dosomething"<<_ref<<endl;
-        QJconnect(sp,Sprite::send,sp,Sprite::test);
-        QJconnect(sp,Sprite::send,sp,Sprite::dosomthing);
-        sp->signal ("Test dosomething send");
-        QJunconnect(sp,Sprite::send,sp,Sprite::test);
+        cout<<a<< '+'<< b<< '='<<a + b<<endl;
     }
-    shared_ptr<Sprite> sp;
+    void ded(int a, int b)
+    {
+        cout<<a<< '-'<< b<< '='<<a - b<<endl;
+    }
+    void state(State s)
+    {
+        cout<<s<<endl;
+    }
 };
 
-shared_ptr<Sprite> sprite(new Sprite() );
-shared_ptr<Sprite> sprite1(new Sprite() );
-void test1()
-{
-    QJconnect(sprite,Sprite::send,sprite,Sprite::test);
-    QJconnect(sprite,Sprite::send,sprite,Sprite::dosomthing );
-    QJconnect(sprite,Sprite::send,sprite1,Sprite::test);
-    QJconnect(sprite,Sprite::send,sprite1,Sprite::dosomthing );
-    sprite->signal ("all");
-
-    cout << "***************"<<std::this_thread::get_id ()<<endl;
-    QJunconnect(sprite,Sprite::send,sprite1,Sprite::test);
-    QJunconnect(sprite,Sprite::send,sprite,Sprite::dosomthing );
-    sprite->signal ("some");
-}
-
-shared_ptr<Sprite> sprite2(new Sprite() );
-shared_ptr<Sprite> sprite3(new Sprite() );
-void test()
-{
-    test1();
-    cout << "test1***************"<<std::this_thread::get_id ()<<endl;
-    shared_ptr<Test> tes1(new Test(sprite2) );
-    QJconnect(sprite3,Sprite::send,tes1,Test::dosomthing);
-    sprite3->signal ("test 1 all");
-    cout << "test1****end***********"<<std::this_thread::get_id ()<<endl;
-}
 
 int main()
 {
-    std::thread t1(test);
-    std::thread t2(test);
-    std::thread t3(test);
-    std::thread t4(test);
-    std::thread t5(test);
-    std::thread t6(test);
-    std::thread t7(test);
-    std::thread t8(test);
-    t1.detach ();
-    t2.detach ();
-    t3.detach ();
-    t4.detach ();
-    t5.detach ();
-    t6.detach ();
-    t7.detach ();
-    t8.detach ();
-    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+    ThreadTest *tt = new ThreadTest;
+    Test t;
+
+    qijia::QJEventLoop::App().init();
+    //QJCONNECT(tt->m_addSignal, &t, &Test::add);
+    ERegister(tt,m_addSignal,&t, &Test::add);
+    ERegister(tt,m_addSignal,&t, &Test::ded);
+    ERegister(tt,KClickEvent,&t, &Test::state);
+    std::thread th(std::mem_fn(&ThreadTest::run),tt);
+    th.detach();
+    std::thread th1(std::mem_fn(&ThreadTest::run),tt);
+    th1.detach();
+    static bool flag = true;
+    while (1)
+    {
+        if (flag)
+        {
+            ERegister(tt,KClickEvent,&t, &Test::state);
+        }
+        else
+        {
+            EUnRegister(tt,KClickEvent,&t, &Test::state);
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        qijia::QJEventLoop::App().loop();
+        flag = !flag;
+
+    }
+
+
+
     return 0;
 }
